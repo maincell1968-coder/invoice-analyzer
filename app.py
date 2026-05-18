@@ -76,32 +76,51 @@ INTESTAZIONI_DEFAULT = [
 st.set_page_config(page_title="Invoice Analyzer", page_icon="📦", layout="wide")
 
 # ==============================
-# SISTEMA DI SICUREZZA (PIN)
+# SISTEMA DI SICUREZZA (UTENTI E PIN)
 # ==============================
-PIN_SEGRETO = "2026UPS"  # Puoi cambiare questo PIN con quello che preferisci
-EMAIL_AUTORE = "tua.email@azienda.com" # Inserisci qui la tua email
+# Le credenziali vengono lette in modo sicuro dai "Secrets" di Streamlit Cloud.
+EMAIL_AUTORE = "stefano@my.com" # L'email mostrata a chi vuole usare il programma
 
 if "autorizzato" not in st.session_state:
     st.session_state.autorizzato = False
+if "utente_corrente" not in st.session_state:
+    st.session_state.utente_corrente = ""
 
 if not st.session_state.autorizzato:
     st.title("🔒 Software Protetto")
-    st.markdown(f"Questo programma è ad uso esclusivo. Per ottenere l'autorizzazione all'uso, richiedi il PIN di sblocco scrivendo a: **{EMAIL_AUTORE}**")
+    st.markdown(f"Questo programma è ad uso esclusivo. Se non hai le credenziali, richiedile a: **{EMAIL_AUTORE}**")
     
     col1, col2 = st.columns([1, 3])
     with col1:
-        pin_inserito = st.text_input("Inserisci PIN di Sblocco:", type="password")
-        if st.button("Sblocca Software"):
-            if pin_inserito == PIN_SEGRETO:
-                st.session_state.autorizzato = True
-                st.rerun()
+        utente_inserito = st.text_input("Nome Utente:")
+        pin_inserito = st.text_input("PIN Personale:", type="password")
+        if st.button("Accedi"):
+            utente_chiave = utente_inserito.strip().lower()
+            
+            # Controllo credenziali nei secrets
+            if "utenti" in st.secrets and utente_chiave in st.secrets["utenti"]:
+                pin_corretto = str(st.secrets["utenti"][utente_chiave])
+                if pin_inserito == pin_corretto:
+                    st.session_state.autorizzato = True
+                    st.session_state.utente_corrente = utente_inserito.strip().capitalize()
+                    st.rerun()
+                else:
+                    st.error("❌ PIN errato.")
             else:
-                st.error("❌ PIN errato. Accesso negato.")
+                # Fallback per accesso locale in caso di problemi di configurazione
+                if utente_chiave == "admin" and pin_inserito == "2026UPS":
+                    st.session_state.autorizzato = True
+                    st.session_state.utente_corrente = "Admin (Locale)"
+                    st.rerun()
+                else:
+                    st.error("❌ Utente non trovato o credenziali errate.")
     
     st.stop() # Blocca l'esecuzione di tutto il resto del programma finché non si inserisce il PIN corretto
 
 st.title("📦 Invoice Analyzer")
 
+st.sidebar.success(f"👤 Connesso come: **{st.session_state.utente_corrente}**")
+st.sidebar.markdown("---")
 st.sidebar.header("📂 Carica file fattura")
 uploaded_file = st.sidebar.file_uploader("Upload CSV fattura", type=["csv", "txt"])
 
@@ -266,6 +285,19 @@ if uploaded_file:
 
             grouped["Stato"] = grouped["Presenza_Alert"].apply(lambda x: "⚠️ Alert" if x else "✅ OK")
 
+            def format_pacchi(p):
+                try:
+                    val = float(p)
+                    if val > 1:
+                        return f"Multipla ({int(val)} colli)"
+                    elif val == 1:
+                        return "1 collo"
+                    return str(p)
+                except:
+                    return str(p) if str(p).strip() != "" else "N/D"
+
+            grouped['Pacchi_Display'] = grouped['Pacchi'].apply(format_pacchi)
+
             # ==============================
             # SEZIONE 1: KPI DASHBOARD
             # ==============================
@@ -318,59 +350,62 @@ if uploaded_file:
                 st.success("Nessun supplemento anomalo rilevato in questa fattura!")
 
             # ==============================
-            # SEZIONE 2: ANALISI PER SERVIZIO
+            # SEZIONE 2: ANALISI PER SERVIZIO SPEDIZIONI SINGOLE
             # ==============================
             st.markdown("---")
-            st.subheader("📊 Analisi per Servizio (Outlier >30%)")
-            st.markdown("<span style='font-size: 0.9em; color: #aaaaaa;'>Mostra il costo medio per collo per ogni servizio e individua le spedizioni che lo superano di oltre il 30%.</span>", unsafe_allow_html=True)
+            st.subheader("📊 Analisi per servizio Spedizioni Singole (Outlier >30%)")
+            st.markdown("<span style='font-size: 0.9em; color: #aaaaaa;'>Mostra il costo medio per ogni servizio (solo per spedizioni a collo singolo) e individua le spedizioni che lo superano di oltre il 30%. Le spedizioni multiple sono escluse da questa analisi.</span>", unsafe_allow_html=True)
             
             if len(grouped) > 0:
                 grouped['Pacchi_Num'] = pd.to_numeric(grouped['Pacchi'], errors='coerce').fillna(1.0)
-                grouped['Costo_Per_Collo'] = grouped['Totale_Spedizione'] / grouped['Pacchi_Num']
                 
-                stats_servizio = grouped.groupby('Servizio').agg(
-                    Num_Spedizioni=('Totale_Spedizione', 'count'),
-                    Costo_Totale_Servizio=('Totale_Spedizione', 'sum'),
-                    Pacchi_Totali_Servizio=('Pacchi_Num', 'sum'),
-                    Peso_Totale_Servizio=('Peso_Fatt', 'sum')
-                ).reset_index()
+                # Filtriamo SOLO le spedizioni singole
+                grouped_singole = grouped[grouped['Pacchi_Num'] == 1.0].copy()
                 
-                stats_servizio['Costo_Medio_Collo'] = stats_servizio['Costo_Totale_Servizio'] / stats_servizio['Pacchi_Totali_Servizio']
-                stats_servizio['Peso_Medio_Collo'] = stats_servizio['Peso_Totale_Servizio'] / stats_servizio['Pacchi_Totali_Servizio']
-                stats_servizio = stats_servizio.sort_values('Num_Spedizioni', ascending=False)
-                
-                for _, row_srv in stats_servizio.iterrows():
-                    srv = row_srv['Servizio']
-                    n_sped = row_srv['Num_Spedizioni']
-                    c_medio_collo = row_srv['Costo_Medio_Collo']
-                    p_medio_collo = row_srv['Peso_Medio_Collo']
-                    soglia = c_medio_collo * 1.30
+                if len(grouped_singole) > 0:
+                    stats_servizio = grouped_singole.groupby('Servizio').agg(
+                        Num_Spedizioni=('Totale_Spedizione', 'count'),
+                        Costo_Totale_Servizio=('Totale_Spedizione', 'sum'),
+                        Peso_Totale_Servizio=('Peso_Fatt', 'sum')
+                    ).reset_index()
                     
-                    outliers_srv = grouped[(grouped['Servizio'] == srv) & (grouped['Costo_Per_Collo'] > soglia)]
-                    num_out = len(outliers_srv)
+                    stats_servizio['Costo_Medio'] = stats_servizio['Costo_Totale_Servizio'] / stats_servizio['Num_Spedizioni']
+                    stats_servizio['Peso_Medio'] = stats_servizio['Peso_Totale_Servizio'] / stats_servizio['Num_Spedizioni']
+                    stats_servizio = stats_servizio.sort_values('Num_Spedizioni', ascending=False)
                     
-                    # Definisci icona e stato per l'expander
-                    status_icon = "🚨" if num_out > 0 else "✅"
-                    
-                    with st.expander(f"{status_icon} {srv} | Spedizioni: {n_sped} | Peso Medio/Collo: {p_medio_collo:.2f} | Costo Medio/Collo: € {c_medio_collo:.2f}"):
-                        if num_out > 0:
-                            st.warning(f"**{num_out}** spedizioni superano la soglia del +30% per collo (**€ {soglia:.2f}**)")
-                            out_display = outliers_srv[[COL_SPEDIZIONE, 'Totale_Spedizione', 'Pacchi', 'Costo_Per_Collo', 'Peso_Fatt']].copy()
-                            out_display['Scostamento %'] = ((out_display['Costo_Per_Collo'] - c_medio_collo) / c_medio_collo * 100)
-                            out_display = out_display.sort_values('Scostamento %', ascending=False)
-                            
-                            st.dataframe(
-                                out_display.style.format({
-                                    'Totale_Spedizione': '€ {:.2f}',
-                                    'Costo_Per_Collo': '€ {:.2f}',
-                                    'Scostamento %': '+{:.1f}%',
-                                    'Peso_Fatt': '{:.2f}'
-                                }),
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                        else:
-                            st.success("Tutte le spedizioni sono in linea con il costo medio per collo.")
+                    for _, row_srv in stats_servizio.iterrows():
+                        srv = row_srv['Servizio']
+                        n_sped = row_srv['Num_Spedizioni']
+                        c_medio = row_srv['Costo_Medio']
+                        p_medio = row_srv['Peso_Medio']
+                        soglia = c_medio * 1.30
+                        
+                        outliers_srv = grouped_singole[(grouped_singole['Servizio'] == srv) & (grouped_singole['Totale_Spedizione'] > soglia)]
+                        num_out = len(outliers_srv)
+                        
+                        # Definisci icona e stato per l'expander
+                        status_icon = "🚨" if num_out > 0 else "✅"
+                        
+                        with st.expander(f"{status_icon} {srv} | Spedizioni Singole: {n_sped} | Peso Medio: {p_medio:.2f} | Costo Medio: € {c_medio:.2f}"):
+                            if num_out > 0:
+                                st.warning(f"**{num_out}** spedizioni superano la soglia del +30% (**€ {soglia:.2f}**)")
+                                out_display = outliers_srv[[COL_SPEDIZIONE, 'Totale_Spedizione', 'Peso_Fatt']].copy()
+                                out_display['Scostamento %'] = ((out_display['Totale_Spedizione'] - c_medio) / c_medio * 100)
+                                out_display = out_display.sort_values('Scostamento %', ascending=False)
+                                
+                                st.dataframe(
+                                    out_display.style.format({
+                                        'Totale_Spedizione': '€ {:.2f}',
+                                        'Scostamento %': '+{:.1f}%',
+                                        'Peso_Fatt': '{:.2f}'
+                                    }),
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                            else:
+                                st.success("Tutte le spedizioni sono in linea con il costo medio.")
+                else:
+                    st.info("Non ci sono spedizioni a collo singolo in questa fattura da poter analizzare.")
 
             # ==============================
             # SEZIONE 3: AUDIT CORRECTION FEE (PREVISIONE PENALI)
@@ -418,8 +453,9 @@ if uploaded_file:
             st.markdown("---")
             st.header("📊 Riepilogo Spedizioni")
             
-            colonne_display = [COL_SPEDIZIONE, "Stato", "Pacchi", "Peso_Fatt", "UM", "Totale_Spedizione", "Nolo", "Fuel", "Tax", "Supplementi"]
+            colonne_display = [COL_SPEDIZIONE, "Stato", "Pacchi_Display", "Peso_Fatt", "UM", "Totale_Spedizione", "Nolo", "Fuel", "Tax", "Supplementi"]
             df_display = grouped[colonne_display].sort_values("Totale_Spedizione", ascending=False)
+            df_display = df_display.rename(columns={"Pacchi_Display": "Pacchi"})
             
             st.dataframe(
                 df_display.style.format({
@@ -448,7 +484,8 @@ if uploaded_file:
             dettaglio = df[df[COL_SPEDIZIONE] == spedizione_selezionata]
             
             info_trk = info_spedizione[info_spedizione[COL_SPEDIZIONE] == spedizione_selezionata].iloc[0]
-            st.info(f"**📦 Pacchi Fatturati:** {info_trk['Pacchi']} | **⚖️ Peso Fatturato:** {info_trk['Peso_Fatt']} {info_trk['UM']} | **⚖️ Peso Dichiarato:** {info_trk['Peso_Spec']} {info_trk['UM']}")
+            pacchi_str = format_pacchi(info_trk['Pacchi'])
+            st.info(f"**📦 Pacchi Fatturati:** {pacchi_str} | **⚖️ Peso Fatturato:** {info_trk['Peso_Fatt']} {info_trk['UM']} | **⚖️ Peso Dichiarato:** {info_trk['Peso_Spec']} {info_trk['UM']}")
 
             def highlight_alerts_dettaglio(row):
                 if row['Alert_Final']:
