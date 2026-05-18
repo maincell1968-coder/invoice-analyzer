@@ -473,24 +473,29 @@ if uploaded_file:
             # SEZIONE 4: TABELLA RIEPILOGATIVA ELEGANTE
             # ==============================
             st.markdown("---")
-            st.header("📊 Riepilogo Spedizioni")
+            st.header("📊 Spedizioni con supplemento")
             
             colonne_display = [COL_SPEDIZIONE, "Stato", "Pacchi_Display", "Peso_Fatt", "UM", "Totale_Spedizione", "Nolo", "Fuel", "Tax", "Supplementi"]
-            df_display = grouped[colonne_display].sort_values("Totale_Spedizione", ascending=False)
+            
+            # Mostriamo solo le spedizioni che hanno un alert di supplemento
+            df_display = grouped[grouped["Stato"] == "⚠️ Alert"][colonne_display].sort_values("Totale_Spedizione", ascending=False)
             df_display = df_display.rename(columns={"Pacchi_Display": "Pacchi"})
             
-            st.dataframe(
-                df_display.style.format({
-                    "Totale_Spedizione": "€ {:.2f}",
-                    "Nolo": "€ {:.2f}",
-                    "Fuel": "€ {:.2f}",
-                    "Tax": "€ {:.2f}",
-                    "Supplementi": "€ {:.2f}",
-                    "Peso_Fatt": "{:.2f}"
-                }).apply(lambda x: ['background-color: #5c2020' if x['Stato'] == '⚠️ Alert' else '' for _ in x], axis=1),
-                use_container_width=True,
-                hide_index=True
-            )
+            if not df_display.empty:
+                st.dataframe(
+                    df_display.style.format({
+                        "Totale_Spedizione": "€ {:.2f}",
+                        "Nolo": "€ {:.2f}",
+                        "Fuel": "€ {:.2f}",
+                        "Tax": "€ {:.2f}",
+                        "Supplementi": "€ {:.2f}",
+                        "Peso_Fatt": "{:.2f}"
+                    }).apply(lambda x: ['background-color: #5c2020' if x['Stato'] == '⚠️ Alert' else '' for _ in x], axis=1),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.success("🎉 Nessuna spedizione con supplemento anomalo trovata.")
 
             # ==============================
             # SEZIONE 5: DETTAGLIO TRACKING
