@@ -324,6 +324,28 @@ if uploaded_file:
             col5.metric("KPI Surcharge (su Netto)", f"{(totale_anomali/fattura_no_tax*100) if fattura_no_tax > 0 else 0:.1f}%", f"€ {totale_anomali:,.2f}", delta_color="inverse")
 
             # ==============================
+            # SEZIONE 1.2: VOLUMI E SERVIZI
+            # ==============================
+            st.markdown("---")
+            st.subheader("📦 Volumi e Servizi")
+            
+            # Calcolo volumi
+            grouped['Pacchi_Num'] = pd.to_numeric(grouped['Pacchi'], errors='coerce').fillna(1.0)
+            tot_spedizioni = len(grouped)
+            singole = len(grouped[grouped['Pacchi_Num'] == 1.0])
+            multiple = len(grouped[grouped['Pacchi_Num'] > 1.0])
+            
+            col_v1, col_v2, col_v3 = st.columns(3)
+            col_v1.metric("Spedizioni Totali", tot_spedizioni)
+            col_v2.metric("Spedizioni Singole (1 Collo)", singole)
+            col_v3.metric("Spedizioni Multiple (>1 Collo)", multiple)
+            
+            st.markdown("**Ripartizione per Servizio:**")
+            sped_per_servizio = grouped['Servizio'].value_counts().reset_index()
+            sped_per_servizio.columns = ['Servizio', 'Numero Spedizioni']
+            st.dataframe(sped_per_servizio, hide_index=True, use_container_width=True)
+
+            # ==============================
             # SEZIONE 1.5: FOCUS SUPPLEMENTI ANOMALI
             # ==============================
             st.markdown("---")
