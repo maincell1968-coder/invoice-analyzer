@@ -490,7 +490,7 @@ if uploaded_file:
                         "Tax": "€ {:.2f}",
                         "Supplementi": "€ {:.2f}",
                         "Peso_Fatt": "{:.2f}"
-                    }).apply(lambda x: ['background-color: #5c2020' if x['Stato'] == '⚠️ Alert' else '' for _ in x], axis=1),
+                    }).apply(lambda x: ['background-color: #5c2020; color: white;' if x['Stato'] == '⚠️ Alert' else '' for _ in x], axis=1),
                     use_container_width=True,
                     hide_index=True
                 )
@@ -516,7 +516,7 @@ if uploaded_file:
 
             def highlight_alerts_dettaglio(row):
                 if row['Alert_Final']:
-                    return ['background-color: #5c2020'] * len(row)
+                    return ['background-color: #5c2020; color: white;'] * len(row)
                 return [''] * len(row)
 
             colonne_dettaglio = [COL_DESCRIZIONE, COL_CLASSIFICAZIONE, 'Categoria_Costo', COL_IMPORTO, 'Alert_Final']
