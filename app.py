@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import csv
+import requests
 
 # --- INTESTAZIONI UFFICIALI UPS ---
 INTESTAZIONI_DEFAULT = [
@@ -81,6 +82,17 @@ st.set_page_config(page_title="Invoice Analyzer", page_icon="📦", layout="wide
 # Le credenziali vengono lette in modo sicuro dai "Secrets" di Streamlit Cloud.
 EMAIL_AUTORE = "stefano@my.com" # L'email mostrata a chi vuole usare il programma
 
+def invia_notifica_telegram(messaggio):
+    if "telegram" in st.secrets and "bot_token" in st.secrets["telegram"] and "chat_id" in st.secrets["telegram"]:
+        bot_token = st.secrets["telegram"]["bot_token"]
+        chat_id = st.secrets["telegram"]["chat_id"]
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": messaggio}
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception:
+            pass # Ignoriamo errori di connessione per non bloccare l'app
+
 if "autorizzato" not in st.session_state:
     st.session_state.autorizzato = False
 if "utente_corrente" not in st.session_state:
@@ -91,10 +103,11 @@ if not st.session_state.autorizzato:
     st.markdown(f"Questo programma è ad uso esclusivo. Se non hai le credenziali, richiedile a: **{EMAIL_AUTORE}**")
     
     st.info("""
-    **Avviso di Servizio (Fase Beta)**  
+    **Avviso di Servizio (Fase Beta) e Monitoraggio Accessi**  
     Questo strumento è attualmente ospitato su un server condiviso gratuito per una fase di test riservata a pochi clienti selezionati.  
     - **Possibili rallentamenti:** Se più persone caricano file di grandi dimensioni contemporaneamente, l'applicazione potrebbe subire forti rallentamenti o riavviarsi temporaneamente (errore di memoria).  
     - **Riattivazione:** Se l'app non viene utilizzata per qualche giorno, entrerà in modalità riposo. Al primo accesso successivo, potrebbe impiegare fino a 1 minuto per "risvegliarsi".
+    - 🛡️ **Sicurezza e Privacy:** Per prevenire abusi e garantire le performance del server, **tutti gli accessi a questa piattaforma sono strettamente monitorati**. Ogni tentativo di login (sia corretto che errato) viene notificato in tempo reale all'amministratore di sistema. Si prega di non condividere le proprie credenziali personali.
     """)
     
     col1, col2 = st.columns([1, 3])
@@ -110,16 +123,20 @@ if not st.session_state.autorizzato:
                 if pin_inserito == pin_corretto:
                     st.session_state.autorizzato = True
                     st.session_state.utente_corrente = utente_inserito.strip().capitalize()
+                    invia_notifica_telegram(f"✅ ACCESSO CONSENTITO: L'utente '{st.session_state.utente_corrente}' è entrato nell'app Invoice Analyzer.")
                     st.rerun()
                 else:
+                    invia_notifica_telegram(f"🚨 TENTATIVO DI INTRUSIONE: Qualcuno ha provato ad accedere con l'utente '{utente_inserito}' ma ha inserito un PIN errato.")
                     st.error("❌ PIN errato.")
             else:
                 # Fallback per accesso locale in caso di problemi di configurazione
                 if utente_chiave == "admin" and pin_inserito == "2026UPS":
                     st.session_state.autorizzato = True
                     st.session_state.utente_corrente = "Admin (Locale)"
+                    invia_notifica_telegram(f"⚠️ ACCESSO ADMIN (FALLBACK): L'amministratore è entrato tramite password di fallback locale.")
                     st.rerun()
                 else:
+                    invia_notifica_telegram(f"🚨 TENTATIVO DI INTRUSIONE: Utente sconosciuto '{utente_inserito}' ha tentato l'accesso.")
                     st.error("❌ Utente non trovato o credenziali errate.")
     
     st.stop() # Blocca l'esecuzione di tutto il resto del programma finché non si inserisce il PIN corretto
