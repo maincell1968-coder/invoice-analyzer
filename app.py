@@ -90,6 +90,13 @@ if not st.session_state.autorizzato:
     st.title("🔒 Software Protetto")
     st.markdown(f"Questo programma è ad uso esclusivo. Se non hai le credenziali, richiedile a: **{EMAIL_AUTORE}**")
     
+    st.info("""
+    **Avviso di Servizio (Fase Beta)**  
+    Questo strumento è attualmente ospitato su un server condiviso gratuito per una fase di test riservata a pochi clienti selezionati.  
+    - **Possibili rallentamenti:** Se più persone caricano file di grandi dimensioni contemporaneamente, l'applicazione potrebbe subire forti rallentamenti o riavviarsi temporaneamente (errore di memoria).  
+    - **Riattivazione:** Se l'app non viene utilizzata per qualche giorno, entrerà in modalità riposo. Al primo accesso successivo, potrebbe impiegare fino a 1 minuto per "risvegliarsi".
+    """)
+    
     col1, col2 = st.columns([1, 3])
     with col1:
         utente_inserito = st.text_input("Nome Utente:")
