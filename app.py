@@ -502,15 +502,47 @@ if uploaded_file:
 
                 st.markdown("### 🎯 Indice di Precisione Operativa")
                 
-                fig = px.pie(
-                    names=['Spedizioni Precise (Delta < 25%)', 'Da Ottimizzare (Delta ≥ 25%)'],
-                    values=[sped_precise, sped_da_perfezionare],
-                    hole=0.4,
-                    color_discrete_sequence=['#28a745', '#ffc107']
-                )
-                fig.update_traces(textinfo='percent+label', textfont_size=16)
-                fig.update_layout(margin=dict(t=20, b=20, l=0, r=0), showlegend=False, height=350)
-                st.plotly_chart(fig, use_container_width=True)
+                col_chart, col_bullets = st.columns([1, 1.2])
+                
+                with col_chart:
+                    fig = px.pie(
+                        names=['Spedizioni Precise', 'Da Ottimizzare'],
+                        values=[sped_precise, sped_da_perfezionare],
+                        hole=0.4,
+                        color_discrete_sequence=['#28a745', '#ffc107']
+                    )
+                    fig.update_traces(textinfo='percent', textfont_size=18, hoverinfo='label+percent')
+                    fig.update_layout(
+                        margin=dict(t=10, b=10, l=10, r=10), 
+                        showlegend=True,
+                        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                        height=300
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col_bullets:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("#### 🛠️ Sintesi dell'Intervento")
+                    if sped_da_perfezionare > 0:
+                        st.warning(f"Abbiamo individuato **{sped_da_perfezionare} spedizioni** su cui possiamo migliorare il processo di pesatura. Agire su queste inefficienze permette di ottimizzare i costi futuri.")
+                        
+                        # Calcolo del supplemento (maggiore tra le due opzioni)
+                        opzione_1 = sped_da_perfezionare * 1.50
+                        spese_totali_corrette = df_rischio['Totale_Spedizione'].sum()
+                        opzione_2 = spese_totali_corrette * 0.08
+                        
+                        if opzione_2 > opzione_1:
+                            tot_scc = opzione_2
+                        else:
+                            tot_scc = opzione_1
+
+                        incidenza_media_spedizione = tot_scc / len(grouped)
+                        
+                        st.markdown(f"- 📦 **Da perfezionare:** {sped_da_perfezionare} su {tot_spedizioni_audit} spedizioni (scostamento ≥ 25%)")
+                        st.markdown(f"- 💶 **Costo Extra Stimato in fattura:** +€ {tot_scc:.2f}")
+                        st.markdown(f"- 📈 **Impatto Medio:** +€ {incidenza_media_spedizione:.2f} per ogni spedizione a fattura")
+                    else:
+                        st.success("Tutte le spedizioni sono in regola! Non c'è nessuna inefficienza rilevata nei pesi e nelle misure.")
                 
                 if not df_rischio.empty:
                     st.markdown("---")
@@ -528,29 +560,6 @@ if uploaded_file:
                         💡 **La nostra Analisi:**  
                         Poiché la fattura contiene solo il peso dichiarato e quello reale fatturato, il sistema stima proattivamente questo rischio evidenziando le spedizioni dove la discrepanza di **Peso** è superiore al **25%** (usato come proxy per lo scostamento di costo).
                         """)
-
-                    # Calcolo del supplemento (maggiore tra le due opzioni)
-                    opzione_1 = len(df_rischio) * 1.50
-                    spese_totali_corrette = df_rischio['Totale_Spedizione'].sum()
-                    opzione_2 = spese_totali_corrette * 0.08
-                    
-                    if opzione_2 > opzione_1:
-                        tot_scc = opzione_2
-                        metodo_scelto = "8% sulle spese corrette"
-                    else:
-                        tot_scc = opzione_1
-                        metodo_scelto = "1,50€ a spedizione"
-
-                    incidenza_su_totale = (tot_scc / totale_fattura) * 100 if totale_fattura > 0 else 0
-                    incidenza_media_spedizione = tot_scc / len(grouped)
-
-                    st.warning(f"🔎 **Area di Intervento:** Trovate **{len(df_rischio)} spedizioni** su cui intervenire (scostamento peso ≥ 25%). Costi operativi extra previsti in futura fattura: **€ {tot_scc:.2f}** (Calcolato con: *{metodo_scelto}*)")
-                    
-                    st.markdown("#### 📉 L'Impatto delle Inefficienze")
-                    col_scc1, col_scc2, col_scc3 = st.columns(3)
-                    col_scc1.metric("Costo Extra Stimato", f"+€ {tot_scc:.2f}", help=f"Il maggiore tra: {len(df_rischio)} sped. x 1,50€ = {opzione_1:.2f}€ e 8% di {spese_totali_corrette:.2f}€ = {opzione_2:.2f}€")
-                    col_scc2.metric("Aumento % su Fattura", f"+{incidenza_su_totale:.2f}%", help="Incidenza percentuale delle potenziali penali rispetto al costo totale dell'attuale fattura.")
-                    col_scc3.metric("Impatto per Spedizione", f"+€ {incidenza_media_spedizione:.2f}", help="Il peso economico di questi futuri supplementi spalmato equamente su tutte le spedizioni di questa fattura.")
                     
                     st.markdown("#### 🔎 Spedizioni su cui formare il magazzino")
                     
