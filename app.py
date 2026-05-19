@@ -493,38 +493,58 @@ if uploaded_file:
                 with st.expander("ℹ️ INFO TECNICA: Come viene calcolato il Rischio Correction Fee", expanded=False):
                     st.markdown("""
                     **Shipping Charge Correction (Correction Fee)**  
-                    UPS applica un supplemento in fattura ("Correction Fee", mediamente **1,50€ a spedizione**) quando rileva una forte discrepanza tra il **Peso Dichiarato** dal cliente e il **Peso Reale/Volumetrico Rilevato** dai loro sistemi.
+                    Un supplemento per la correzione delle spese di spedizione viene applicato da UPS quando riscontra una discrepanza tra pesi e dimensioni dichiarate e rilevate tale per cui il costo fatturato risulti essere pari o superiore al 25% rispetto a quello dichiarato.
+                    
+                    Il supplemento è calcolato sull'insieme delle spedizioni corrette nel periodo di fatturazione, ed equivale alla **maggiore tra due opzioni**:
+                    • **EUR 1,50** per ogni spedizione soggetta a correzione; oppure
+                    • **8% dell'importo totale** delle spese di spedizione corrette.
                     
                     💡 **La nostra Analisi:**  
-                    Per aiutarti a prevenire future penali, il sistema analizza tutte le spedizioni confrontando il peso originariamente specificato con quello effettivamente fatturato. 
-                    Se la discrepanza rilevata da UPS è **superiore al 25%**, la spedizione viene evidenziata come "A Rischio". 
+                    Poiché la fattura contiene solo il peso dichiarato e quello reale fatturato, il sistema stima proattivamente questo rischio evidenziando le spedizioni dove la discrepanza di **Peso** è superiore al **25%** (usato come proxy per lo scostamento di costo). 
                     In questo modo potrai agire proattivamente ed educare chi prepara i colli a pesare e misurare con maggiore precisione.
                     """)
 
                 df_rischio = grouped[grouped['Rischio_SCC'] == True]
                 
                 if not df_rischio.empty:
-                    tot_scc = len(df_rischio) * 1.50
+                    # Calcolo del supplemento (maggiore tra le due opzioni)
+                    opzione_1 = len(df_rischio) * 1.50
+                    spese_totali_corrette = df_rischio['Totale_Spedizione'].sum()
+                    opzione_2 = spese_totali_corrette * 0.08
+                    
+                    if opzione_2 > opzione_1:
+                        tot_scc = opzione_2
+                        metodo_scelto = "8% sulle spese corrette"
+                    else:
+                        tot_scc = opzione_1
+                        metodo_scelto = "1,50€ a spedizione"
+
                     incidenza_su_totale = (tot_scc / totale_fattura) * 100 if totale_fattura > 0 else 0
                     incidenza_media_spedizione = tot_scc / len(grouped)
 
-                    st.warning(f"🚨 Trovate **{len(df_rischio)} spedizioni** con scostamento di peso ≥ 25%. Rischio penali Correction Fee stimate in fattura successiva: **€ {tot_scc:.2f}**")
+                    st.warning(f"🚨 Trovate **{len(df_rischio)} spedizioni** con scostamento di peso ≥ 25%. Rischio penali Correction Fee stimate in fattura successiva: **€ {tot_scc:.2f}** (Calcolato con: *{metodo_scelto}*)")
                     
                     st.markdown("### 📊 Impatto Globale Previsto")
                     col_scc1, col_scc2, col_scc3 = st.columns(3)
-                    col_scc1.metric("Aumento Costo Fattura", f"+€ {tot_scc:.2f}", help="Totale dei Correction Fee stimati che potrebbero essere addebitati nella prossima fattura.")
+                    col_scc1.metric("Aumento Costo Fattura", f"+€ {tot_scc:.2f}", help=f"Il maggiore tra: {len(df_rischio)} sped. x 1,50€ = {opzione_1:.2f}€ e 8% di {spese_totali_corrette:.2f}€ = {opzione_2:.2f}€")
                     col_scc2.metric("Aumento % su Fattura", f"+{incidenza_su_totale:.2f}%", help="Incidenza percentuale delle penali previste rispetto al costo totale dell'attuale fattura.")
                     col_scc3.metric("Incidenza per Spedizione", f"+€ {incidenza_media_spedizione:.2f}", help="Il peso economico di questi futuri supplementi spalmato equamente su tutte le spedizioni di questa fattura.")
                     
                     st.success(f"💡 **L'Impatto Nascosto sui tuoi Margini:**\n\n"
                             f"La previsione di queste penali, pari a **€ {tot_scc:.2f}**, ci rivela un costo occulto. Se distribuiamo questa cifra sull'intero volume analizzato, stiamo subendo **un aumento reale dei costi di € {incidenza_media_spedizione:.2f} per ogni singola spedizione** di questa fattura. Intervenire e formare chi imballa i colli significa trasformare questa perdita in puro margine recuperato!")
                     
-                    st.markdown("### 🔎 Dettaglio Spedizioni a Rischio (+1,50€ stimati)")
+                    st.markdown("### 🔎 Dettaglio Spedizioni a Rischio")
                     
                     # Preparo tabella display
                     df_scc_display = df_rischio[[COL_SPEDIZIONE, 'Peso_Spec', 'Peso_Fatt', 'Delta_Peso_Perc', 'UM', 'Totale_Spedizione']].copy()
-                    df_scc_display['Penale Stimata'] = 1.50
-                    df_scc_display['Nuovo Costo Stimato'] = df_scc_display['Totale_Spedizione'] + 1.50
+                    
+                    if opzione_2 > opzione_1:
+                        # Ripartizione proporzionale dell'8% per riga
+                        df_scc_display['Penale Stimata'] = df_scc_display['Totale_Spedizione'] * 0.08
+                    else:
+                        df_scc_display['Penale Stimata'] = 1.50
+                        
+                    df_scc_display['Nuovo Costo Stimato'] = df_scc_display['Totale_Spedizione'] + df_scc_display['Penale Stimata']
                     
                     df_scc_display = df_scc_display.rename(columns={
                         'Peso_Spec': 'Peso Dichiarato', 
