@@ -157,6 +157,11 @@ if not st.session_state.autorizzato:
 
 st.title("📦 Invoice Analyzer")
 
+st.success("""
+💡 **Lavoriamo insieme per migliorare:**  
+Questo strumento è pensato per offrirti una mappa chiara delle aree in cui possiamo ottimizzare la tua operatività. Le discrepanze di peso o volume sono un indicatore prezioso che ci mostra dove il processo di imballaggio e misurazione può essere affinato. L'obiettivo di questa analisi è collaborare con te per correggere queste inefficienze alla radice, garantendo che ogni spedizione parta già perfetta e ottimizzando i tuoi costi senza sorprese.
+""")
+
 st.sidebar.success(f"👤 Connesso come: **{st.session_state.utente_corrente}**")
 st.sidebar.markdown("---")
 st.sidebar.header("📂 Carica file fattura")
@@ -489,11 +494,6 @@ if uploaded_file:
             if attiva_audit_scc:
                 st.markdown("---")
                 st.header("⚖️ Ottimizzazione Operativa: Pesi e Misure")
-                
-                st.success("""
-                💡 **Lavoriamo insieme per migliorare:**  
-                Questo strumento è pensato per offrirti una mappa chiara delle aree in cui possiamo ottimizzare la tua operatività. Le discrepanze di peso o volume sono un indicatore prezioso che ci mostra dove il processo di imballaggio e misurazione può essere affinato. L'obiettivo di questa analisi è collaborare con te per correggere queste inefficienze alla radice, garantendo che ogni spedizione parta già perfetta e ottimizzando i tuoi costi senza sorprese.
-                """)
 
                 df_rischio = grouped[grouped['Rischio_SCC'] == True]
                 tot_spedizioni_audit = len(grouped)
