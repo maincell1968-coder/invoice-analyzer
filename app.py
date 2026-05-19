@@ -76,6 +76,20 @@ INTESTAZIONI_DEFAULT = [
 # Configurazione iniziale
 st.set_page_config(page_title="Invoice Analyzer", page_icon="📦", layout="wide")
 
+# CSS personalizzato per correggere la visualizzazione delle metriche
+st.markdown("""
+<style>
+/* Evita il troncamento dei numeri (puntini...) nelle metriche e li ridimensiona dinamicamente */
+[data-testid="stMetricValue"] > div {
+    font-size: clamp(1.1rem, 2.5vw, 1.8rem) !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    line-height: 1.2 !important;
+    word-break: break-word !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==============================
 # SISTEMA DI SICUREZZA (UTENTI E PIN)
 # ==============================
@@ -399,7 +413,7 @@ if uploaded_file:
             # SEZIONE 2: ANALISI PER SERVIZIO SPEDIZIONI SINGOLE
             # ==============================
             st.markdown("---")
-            st.subheader("📊 Analisi per servizio Spedizioni Singole (Outlier >30%)")
+            st.subheader("📊 KPI: Outlier >30%")
             st.markdown("<span style='font-size: 0.9em; color: #aaaaaa;'>Mostra il costo medio per ogni servizio (solo per spedizioni a collo singolo) e individua le spedizioni che lo superano di oltre il 30%. Le spedizioni multiple sono escluse da questa analisi.</span>", unsafe_allow_html=True)
             
             if len(grouped) > 0:
@@ -474,18 +488,42 @@ if uploaded_file:
                 df_rischio = grouped[grouped['Rischio_SCC'] == True]
                 
                 if not df_rischio.empty:
-                    st.warning(f"🚨 Trovate **{len(df_rischio)} spedizioni** con scostamento di peso ≥ 25%. Rischio penali Correction Fee stimate in fattura successiva: **€ {len(df_rischio) * 1.50:.2f}**")
+                    tot_scc = len(df_rischio) * 1.50
+                    incidenza_su_totale = (tot_scc / totale_fattura) * 100 if totale_fattura > 0 else 0
+                    incidenza_media_spedizione = tot_scc / len(grouped)
+
+                    st.warning(f"🚨 Trovate **{len(df_rischio)} spedizioni** con scostamento di peso ≥ 25%. Rischio penali Correction Fee stimate in fattura successiva: **€ {tot_scc:.2f}**")
+                    
+                    st.markdown("### 📊 Impatto Globale Previsto")
+                    col_scc1, col_scc2, col_scc3 = st.columns(3)
+                    col_scc1.metric("Aumento Costo Fattura", f"+€ {tot_scc:.2f}", help="Totale dei Correction Fee stimati che potrebbero essere addebitati nella prossima fattura.")
+                    col_scc2.metric("Aumento % su Fattura", f"+{incidenza_su_totale:.2f}%", help="Incidenza percentuale delle penali previste rispetto al costo totale dell'attuale fattura.")
+                    col_scc3.metric("Incidenza per Spedizione", f"+€ {incidenza_media_spedizione:.2f}", help="Il peso economico di questi futuri supplementi spalmato equamente su tutte le spedizioni di questa fattura.")
+                    
+                    st.success(f"💡 **L'Impatto Nascosto sui tuoi Margini:**\n\n"
+                            f"La previsione di queste penali, pari a **€ {tot_scc:.2f}**, ci rivela un costo occulto. Se distribuiamo questa cifra sull'intero volume analizzato, stiamo subendo **un aumento reale dei costi di € {incidenza_media_spedizione:.2f} per ogni singola spedizione** di questa fattura. Intervenire e formare chi imballa i colli significa trasformare questa perdita in puro margine recuperato!")
+                    
+                    st.markdown("### 🔎 Dettaglio Spedizioni a Rischio (+1,50€ stimati)")
                     
                     # Preparo tabella display
-                    df_scc_display = df_rischio[[COL_SPEDIZIONE, 'Peso_Spec', 'Peso_Fatt', 'Delta_Peso_Perc', 'UM', 'Totale_Spedizione']]
-                    df_scc_display = df_scc_display.rename(columns={'Peso_Spec': 'Peso Dichiarato', 'Peso_Fatt': 'Peso Fatturato UPS', 'Totale_Spedizione': 'Spesa Attuale'})
+                    df_scc_display = df_rischio[[COL_SPEDIZIONE, 'Peso_Spec', 'Peso_Fatt', 'Delta_Peso_Perc', 'UM', 'Totale_Spedizione']].copy()
+                    df_scc_display['Penale Stimata'] = 1.50
+                    df_scc_display['Nuovo Costo Stimato'] = df_scc_display['Totale_Spedizione'] + 1.50
+                    
+                    df_scc_display = df_scc_display.rename(columns={
+                        'Peso_Spec': 'Peso Dichiarato', 
+                        'Peso_Fatt': 'Peso Fatturato UPS', 
+                        'Totale_Spedizione': 'Spesa Attuale'
+                    })
                     
                     st.dataframe(
                         df_scc_display.style.format({
                             'Peso Dichiarato': "{:.2f}",
                             'Peso Fatturato UPS': "{:.2f}",
                             'Delta_Peso_Perc': "+{:.1f}%",
-                            'Spesa Attuale': "€ {:.2f}"
+                            'Spesa Attuale': "€ {:.2f}",
+                            'Penale Stimata': "+€ {:.2f}",
+                            'Nuovo Costo Stimato': "€ {:.2f}"
                         }),
                         use_container_width=True,
                         hide_index=True
@@ -527,30 +565,46 @@ if uploaded_file:
             st.markdown("---")
             st.header("🔎 Dettaglio Singolo Tracking")
             
-            spedizione_selezionata = st.selectbox(
-                "Digita o seleziona un tracking per esploderne i costi:",
-                grouped[COL_SPEDIZIONE]
-            )
-
-            dettaglio = df[df[COL_SPEDIZIONE] == spedizione_selezionata]
+            col_search, col_select = st.columns(2)
+            with col_search:
+                ricerca_tracking = st.text_input("🔍 Filtra Tracking (es. ultime cifre):", "", help="Scrivi parte del numero di tracking per trovare subito la spedizione che cerchi.")
             
-            info_trk = info_spedizione[info_spedizione[COL_SPEDIZIONE] == spedizione_selezionata].iloc[0]
-            pacchi_str = format_pacchi(info_trk['Pacchi'])
-            st.info(f"**📦 Pacchi Fatturati:** {pacchi_str} | **⚖️ Peso Fatturato:** {info_trk['Peso_Fatt']} {info_trk['UM']} | **⚖️ Peso Dichiarato:** {info_trk['Peso_Spec']} {info_trk['UM']}")
-
-            def highlight_alerts_dettaglio(row):
-                if row['Alert_Final']:
-                    return ['background-color: #5c2020; color: white;'] * len(row)
-                return [''] * len(row)
-
-            colonne_dettaglio = [COL_DESCRIZIONE, COL_CLASSIFICAZIONE, 'Categoria_Costo', COL_IMPORTO, 'Alert_Final']
+            opzioni_tracking = grouped[COL_SPEDIZIONE].tolist()
+            if ricerca_tracking.strip():
+                opzioni_tracking = [t for t in opzioni_tracking if ricerca_tracking.strip().upper() in str(t).upper()]
+                
+            with col_select:
+                if opzioni_tracking:
+                    spedizione_selezionata = st.selectbox(
+                        "Seleziona il tracking filtrato:",
+                        opzioni_tracking
+                    )
+                else:
+                    st.selectbox("Seleziona il tracking filtrato:", ["Nessun risultato trovato"])
+                    spedizione_selezionata = None
             
-            st.dataframe(
-                dettaglio[colonne_dettaglio].style.apply(highlight_alerts_dettaglio, axis=1).format({COL_IMPORTO: "€ {:.2f}"}),
-                use_container_width=True,
-                hide_index=True,
-                column_config={"Alert_Final": None}
-            )
+            if spedizione_selezionata:
+                dettaglio = df[df[COL_SPEDIZIONE] == spedizione_selezionata]
+                
+                info_trk = info_spedizione[info_spedizione[COL_SPEDIZIONE] == spedizione_selezionata].iloc[0]
+                pacchi_str = format_pacchi(info_trk['Pacchi'])
+                st.info(f"**📦 Pacchi Fatturati:** {pacchi_str} | **⚖️ Peso Fatturato:** {info_trk['Peso_Fatt']} {info_trk['UM']} | **⚖️ Peso Dichiarato:** {info_trk['Peso_Spec']} {info_trk['UM']}")
+    
+                def highlight_alerts_dettaglio(row):
+                    if row['Alert_Final']:
+                        return ['background-color: #5c2020; color: white;'] * len(row)
+                    return [''] * len(row)
+    
+                colonne_dettaglio = [COL_DESCRIZIONE, COL_CLASSIFICAZIONE, 'Categoria_Costo', COL_IMPORTO, 'Alert_Final']
+                
+                st.dataframe(
+                    dettaglio[colonne_dettaglio].style.apply(highlight_alerts_dettaglio, axis=1).format({COL_IMPORTO: "€ {:.2f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={"Alert_Final": None}
+                )
+            else:
+                st.warning("Nessun tracking trovato con i criteri di ricerca inseriti.")
 
         else:
             st.error(f"⚠️ Mappatura fallita. Non trovo: {', '.join(colonne_mancanti)}")
@@ -568,7 +622,7 @@ st.markdown("---")
 st.markdown("""
 <!-- DIGITAL_SIGNATURE_HASH: 9a7b-42c1-MEDION-AUTH-2026-UPS-ANALYZER-ORIGINAL -->
 <!-- PROPERTY_OF: The original author of this script. Unauthorized copying is prohibited. -->
-<div style='font-size: 0.8em; color: #888888; text-align: justify; padding: 10px; border: 1px solid #444444; border-radius: 5px; background-color: #2b2b2b;'>
+<div style='font-size: 0.85em; color: var(--text-color); text-align: justify; padding: 12px; border: 1px solid var(--border-color); border-radius: 5px; background-color: var(--secondary-background-color); opacity: 0.8;'>
     <strong>Disclaimer – Authorized Use, Liability Limitation, and Non‑Affiliation Notice</strong><br><br>
     This invoice‑analysis program has been designed, developed, and distributed solely by the author for informational and educational purposes. 
     The software is not an official UPS tool and has not been reviewed, approved, endorsed, or validated by UPS or any of its affiliated companies.<br><br>
