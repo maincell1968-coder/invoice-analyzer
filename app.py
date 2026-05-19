@@ -414,7 +414,7 @@ if uploaded_file:
             # ==============================
             st.markdown("---")
             st.subheader("📊 KPI: Outlier >30%")
-            st.markdown("<span style='font-size: 0.9em; color: #aaaaaa;'>Mostra il costo medio per ogni servizio (solo per spedizioni a collo singolo) e individua le spedizioni che lo superano di oltre il 30%. Le spedizioni multiple sono escluse da questa analisi.</span>", unsafe_allow_html=True)
+            st.info("💡 **Disclaimer:** Il KPI “Outlier >30%” segnala spedizioni con uno scostamento significativo rispetto al costo medio del cliente. La sua rilevanza aumenta per clienti con formati di spedizione standardizzati, mentre può risultare meno indicativo in presenza di ampia variabilità di pesi e dimensioni.")
             
             if len(grouped) > 0:
                 grouped['Pacchi_Num'] = pd.to_numeric(grouped['Pacchi'], errors='coerce').fillna(1.0)
@@ -423,6 +423,22 @@ if uploaded_file:
                 grouped_singole = grouped[grouped['Pacchi_Num'] == 1.0].copy()
                 
                 if len(grouped_singole) > 0:
+                    # Calcolo indice di omogeneità sui pesi
+                    pesi_validi = grouped_singole['Peso_Fatt'].dropna()
+                    if len(pesi_validi) > 0:
+                        pesi_arrotondati = pesi_validi.round()
+                        percentuale_dominante = (pesi_arrotondati.value_counts().max() / len(pesi_validi)) * 100
+                    else:
+                        percentuale_dominante = 0
+                        
+                    if percentuale_dominante >= 80:
+                        with st.expander(f"🟢 **Contesto Omogeneo ({percentuale_dominante:.0f}%)** - Dato altamente significativo"):
+                            st.markdown("Oltre l’80% delle spedizioni rientra nello stesso range di peso reale o volumetrico.\n\nL’indicatore Outlier >30% è considerato **altamente significativo**.")
+                    else:
+                        with st.expander(f"🟡 **Alta Variabilità ({percentuale_dominante:.0f}%)** - Interpretare con cautela"):
+                            st.markdown("Le spedizioni risultano distribuite su più range di peso e volume.\n\nL’indicatore Outlier >30% può riflettere **variabilità operativa fisiologica**.")
+                            
+                    st.markdown("<br>", unsafe_allow_html=True)
                     stats_servizio = grouped_singole.groupby('Servizio').agg(
                         Num_Spedizioni=('Totale_Spedizione', 'count'),
                         Costo_Totale_Servizio=('Totale_Spedizione', 'sum'),
