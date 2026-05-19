@@ -492,7 +492,7 @@ if uploaded_file:
                 
                 st.success("""
                 💡 **Lavoriamo insieme per migliorare:**  
-                Questo strumento non è pensato per contare i supplementi applicati da UPS, ma per offrirti una mappa chiara delle aree in cui possiamo ottimizzare la tua operatività. Le discrepanze di peso o volume non sono una "tassa" ingiusta, ma un indicatore prezioso che ci mostra dove il processo di imballaggio e misurazione può essere affinato. L'obiettivo di questa analisi è collaborare con te per correggere queste inefficienze alla radice, garantendo che ogni spedizione parta già perfetta e ottimizzando i tuoi costi senza sorprese.
+                Questo strumento è pensato per offrirti una mappa chiara delle aree in cui possiamo ottimizzare la tua operatività. Le discrepanze di peso o volume sono un indicatore prezioso che ci mostra dove il processo di imballaggio e misurazione può essere affinato. L'obiettivo di questa analisi è collaborare con te per correggere queste inefficienze alla radice, garantendo che ogni spedizione parta già perfetta e ottimizzando i tuoi costi senza sorprese.
                 """)
 
                 df_rischio = grouped[grouped['Rischio_SCC'] == True]
