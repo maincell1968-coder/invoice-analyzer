@@ -536,11 +536,12 @@ if uploaded_file:
                         else:
                             tot_scc = opzione_1
 
-                        incidenza_media_spedizione = tot_scc / len(grouped)
-                        
                         st.markdown(f"- 📦 **Da perfezionare:** {sped_da_perfezionare} su {tot_spedizioni_audit} spedizioni (scostamento ≥ 25%)")
-                        st.markdown(f"- 💶 **Costo Extra Stimato in fattura:** +€ {tot_scc:.2f}")
-                        st.markdown(f"- 📈 **Impatto Medio:** +€ {incidenza_media_spedizione:.2f} per ogni spedizione a fattura")
+                        st.markdown(f"- ⚠️ **Previsione Correction Fee:** +€ {tot_scc:.2f}")
+                        
+                        totale_anomali_bullet = df[df['Alert_Final'] == True][COL_IMPORTO].sum()
+                        if totale_anomali_bullet > 0:
+                            st.markdown(f"- 💶 **Imballi che necessitano movimentazioni speciali:** +€ {totale_anomali_bullet:.2f}")
                     else:
                         st.success("Tutte le spedizioni sono in regola! Non c'è nessuna inefficienza rilevata nei pesi e nelle misure.")
                 
