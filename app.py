@@ -671,6 +671,67 @@ if uploaded_file:
             else:
                 st.warning("Nessun tracking trovato con i criteri di ricerca inseriti.")
 
+            # ==============================
+            # SEZIONE 6: INSIGHT E OPPORTUNITÀ DI RISPARMIO
+            # ==============================
+            st.markdown("---")
+            st.header("💡 Insight")
+            
+            # 1. Aria Pagata (Peso Volumetrico)
+            df_volumetrico = grouped[(grouped['Peso_Fatt'] > grouped['Peso_Spec']) & (grouped['Peso_Spec'] > 0)]
+            if not df_volumetrico.empty:
+                perc_volumetrico = (len(df_volumetrico) / len(grouped)) * 100
+                st.warning(f"**📦 Ottimizzazione Imballi (Peso Volumetrico):** Il **{perc_volumetrico:.1f}%** delle tue spedizioni ({len(df_volumetrico)} su {len(grouped)}) è stato tassato a volume invece che a peso reale. Questo significa che hai pagato per trasportare aria. Rivedere le dimensioni delle scatole o l'uso di riempitivi potrebbe generare risparmi significativi sui noli.")
+            
+            # 2. Supplementi Evitabili
+            df_evitabili = df[df['Alert_Final'] == True].copy()
+            if not df_evitabili.empty:
+                df_evitabili['Desc_Lower'] = df_evitabili[COL_DESCRIZIONE].astype(str).str.lower()
+                
+                mask_indirizzo = df_evitabili['Desc_Lower'].str.contains('address|indirizz')
+                mask_movimentazione = df_evitabili['Desc_Lower'].str.contains('handling|movimentazione')
+                mask_pacco_grande = df_evitabili['Desc_Lower'].str.contains('large|grande')
+                
+                costo_indirizzo = df_evitabili[mask_indirizzo][COL_IMPORTO].sum()
+                costo_movimentazione = df_evitabili[mask_movimentazione][COL_IMPORTO].sum()
+                costo_pacco_grande = df_evitabili[mask_pacco_grande][COL_IMPORTO].sum()
+                
+                if costo_indirizzo > 0 or costo_movimentazione > 0 or costo_pacco_grande > 0:
+                    st.info("**🎯 Supplementi Comportamentali Evitabili:** Abbiamo rilevato costi extra che dipendono dalla tua operatività e possono essere ridotti o azzerati:")
+                    if costo_indirizzo > 0:
+                        st.markdown(f"- 🏠 **Correzione Indirizzo (€ {costo_indirizzo:.2f}):** Controlla il software del checkout o integra un validatore di CAP per evitare errori di battitura.")
+                    if costo_movimentazione > 0:
+                        st.markdown(f"- 📦 **Movimentazione Aggiuntiva (€ {costo_movimentazione:.2f}):** L'imballo non è standard (es. pluriball, forme irregolari, troppo pesante). Valuta formati di confezionamento alternativi.")
+                    if costo_pacco_grande > 0:
+                        st.markdown(f"- 📏 **Pacco Grande (€ {costo_pacco_grande:.2f}):** Per formati extra-large, verifica se commercialmente ed operativamente conviene dividere la spedizione in scatole più piccole.")
+
+            # 3. Resa Geografica
+            if 'Paese del destinatario' in df.columns:
+                geo_cost = df.groupby(COL_SPEDIZIONE).agg(
+                    Paese=('Paese del destinatario', 'first'),
+                    Costo=(COL_IMPORTO, 'sum')
+                ).reset_index()
+                
+                geo_cost = geo_cost[geo_cost['Paese'].astype(str).str.strip() != '']
+                if not geo_cost.empty:
+                    top_paesi = geo_cost.groupby('Paese').agg(
+                        Costo_Medio=('Costo', 'mean'),
+                        Spedizioni=('Costo', 'count')
+                    ).reset_index().sort_values(by='Costo_Medio', ascending=False)
+                    
+                    top_paesi = top_paesi[top_paesi['Spedizioni'] >= 3] # Almeno 3 spedizioni
+                    if not top_paesi.empty:
+                        paese_top = top_paesi.iloc[0]['Paese']
+                        costo_top = top_paesi.iloc[0]['Costo_Medio']
+                        st.success(f"**🗺️ Analisi Geografica:** Il Paese in cui mediamente costa di più recapitare la merce è **{paese_top}** (Media: € {costo_top:.2f} a spedizione). Verifica se le tariffe di spedizione che fai pagare ai clienti coprono questi costi di resa.")
+
+            # 4. Unit Economics (Pacco Medio)
+            totale_pesi = grouped['Peso_Fatt'].sum()
+            if totale_pesi > 0 and len(grouped) > 0:
+                costo_medio_spedizione = fattura_no_tax / len(grouped)
+                costo_medio_kg = fattura_no_tax / totale_pesi
+                st.success(f"**⚖️ Unit Economics (Pacco Medio):** Al netto delle tasse, il costo medio reale di una tua spedizione è di **€ {costo_medio_spedizione:.2f}**, con un'incidenza media di **€ {costo_medio_kg:.2f} al Kg**. Tieni a mente questi valori quando calcoli il tuo Punto di Pareggio (Break-Even) per offrire la Spedizione Gratuita.")
+
         else:
             st.error(f"⚠️ Mappatura fallita. Non trovo: {', '.join(colonne_mancanti)}")
 
