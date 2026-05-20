@@ -526,15 +526,8 @@ if uploaded_file:
                     if sped_da_perfezionare > 0:
                         st.warning(f"Abbiamo individuato **{sped_da_perfezionare} spedizioni** su cui possiamo migliorare il processo di pesatura. Agire su queste inefficienze permette di ottimizzare i costi futuri.")
                         
-                        # Calcolo del supplemento (maggiore tra le due opzioni)
-                        opzione_1 = sped_da_perfezionare * 1.50
-                        spese_totali_corrette = df_rischio['Totale_Spedizione'].sum()
-                        opzione_2 = spese_totali_corrette * 0.08
-                        
-                        if opzione_2 > opzione_1:
-                            tot_scc = opzione_2
-                        else:
-                            tot_scc = opzione_1
+                        # Calcolo del supplemento (maggiore tra 1.50 e l'8% per ogni singola spedizione)
+                        tot_scc = df_rischio['Totale_Spedizione'].apply(lambda x: max(1.50, x * 0.08)).sum()
 
                         st.markdown(f"- 📦 **Da perfezionare:** {sped_da_perfezionare} su {tot_spedizioni_audit} spedizioni (scostamento ≥ 25%)")
                         st.markdown(f"- ⚠️ **Previsione Correction Fee:** +€ {tot_scc:.2f}")
@@ -547,7 +540,7 @@ if uploaded_file:
                 
                 if not df_rischio.empty:
                     st.markdown("---")
-                    st.markdown("### 📊 Dettaglio delle Aree di Miglioramento")
+                    st.markdown("### 📊 KPI: Correction Fee")
                     
                     with st.expander("ℹ️ INFO TECNICA: Come UPS calcola il Correction Fee", expanded=False):
                         st.markdown("""
@@ -567,11 +560,8 @@ if uploaded_file:
                     # Preparo tabella display
                     df_scc_display = df_rischio[[COL_SPEDIZIONE, 'Peso_Spec', 'Peso_Fatt', 'Delta_Peso_Perc', 'UM', 'Totale_Spedizione']].copy()
                     
-                    if opzione_2 > opzione_1:
-                        # Ripartizione proporzionale dell'8% per riga
-                        df_scc_display['Penale Stimata'] = df_scc_display['Totale_Spedizione'] * 0.08
-                    else:
-                        df_scc_display['Penale Stimata'] = 1.50
+                    # La penale per riga non può mai essere inferiore a 1.50
+                    df_scc_display['Penale Stimata'] = df_scc_display['Totale_Spedizione'].apply(lambda x: max(1.50, x * 0.08))
                         
                     df_scc_display['Nuovo Costo Stimato'] = df_scc_display['Totale_Spedizione'] + df_scc_display['Penale Stimata']
                     
