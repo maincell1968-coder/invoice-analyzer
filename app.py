@@ -3,6 +3,17 @@ import pandas as pd
 import plotly.express as px
 import csv
 import requests
+import os
+import re
+from ups_rules import load_ups_rules
+from excel_report import generate_excel_report
+
+# --- CARICAMENTO REGOLE DALLA GUIDA SERVIZI UPS (PDF) ---
+pdf_filename = "preview-service-guide-it-it.pdf"
+if not os.path.exists(pdf_filename):
+    pdf_filename = os.path.join("ups_analyzer", pdf_filename)
+rules = load_ups_rules(pdf_filename)
+
 
 # --- INTESTAZIONI UFFICIALI UPS ---
 INTESTAZIONI_DEFAULT = [
@@ -242,9 +253,10 @@ if uploaded_file:
                     peso_fatt = row[COL_PESO_FATT]
                     if pd.notna(peso_dich) and pd.notna(peso_fatt) and peso_dich > 0 and peso_fatt > peso_dich:
                         delta_perc = ((peso_fatt - peso_dich) / peso_dich) * 100
-                        if delta_perc >= 25.0:
+                        if delta_perc >= rules["correction_fee_threshold"]:
                             return True, delta_perc
                 return False, 0.0
+
 
             scc_results = df.apply(calcola_rischio_scc, axis=1)
             df['Rischio_SCC'] = [res[0] for res in scc_results]
@@ -341,6 +353,46 @@ if uploaded_file:
 
             grouped['Pacchi_Display'] = grouped['Pacchi'].apply(format_pacchi)
 
+            # --- ESTRAZIONE CODICE CLIENTE E GENERAZIONE REPORT EXCEL ---
+            client_code = "Sconosciuto"
+            for trk in grouped[COL_SPEDIZIONE].dropna():
+                trk_str = str(trk).strip().upper()
+                match = re.search(r'1Z([A-Z0-9]{6})', trk_str)
+                if match:
+                    client_code = match.group(1)
+                    break
+            
+            # Generazione del report in memoria
+            excel_data = generate_excel_report(df, grouped, rules, client_code)
+            
+            # Visualizzazione box di audit client e download report
+            st.markdown("---")
+            st.markdown(
+                f"""
+                <div style="background-color: #f4f0ea; padding: 20px; border-radius: 10px; border-left: 5px solid #36220F; margin-bottom: 20px;">
+                    <h3 style="color: #36220F; margin-top: 0;">💼 Area di Consulenza Head-to-Head</h3>
+                    <p style="color: #555; margin-bottom: 15px;">
+                        Usa questa area durante il colloquio con il cliente per analizzare i punti critici. 
+                        Genera un report Excel professionale pre-compilato con le raccomandazioni strategiche basate sulla Guida Servizi UPS 2026.
+                    </p>
+                    <p style="font-weight: bold; color: #36220F;">Codice Cliente Rilevato: Analisi Codice Cliente ({client_code})</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            
+            col_dwn, col_info = st.columns([2, 3])
+            with col_dwn:
+                st.download_button(
+                    label="📥 Genera e Scarica Report Excel",
+                    data=excel_data,
+                    file_name=f"Report_Ottimizzazione_UPS_{client_code}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    help="Scarica il report Excel formattato con i consigli operativi per recuperare revenue"
+                )
+            with col_info:
+                st.info("Il report Excel include la sintesi executive delle voci di costo e il dettaglio delle spedizioni critiche (es. scostamenti peso, peso volumetrico, supplementi evitabili).")
+
             # ==============================
             # SEZIONE 1: KPI DASHBOARD
             # ==============================
@@ -364,7 +416,7 @@ if uploaded_file:
             col2.metric("Spesa Netta (Senza Tax)", f"€ {fattura_no_tax:,.2f}")
             col3.metric("Incidenza Nolo Base", f"{(totale_nolo/fattura_no_tax*100) if fattura_no_tax > 0 else 0:.1f}%", f"€ {totale_nolo:,.2f}")
             col4.metric("Incidenza Fuel", f"{(totale_fuel/fattura_no_tax*100) if fattura_no_tax > 0 else 0:.1f}%", f"€ {totale_fuel:,.2f}")
-            col5.metric("KPI Surcharge (su Netto)", f"{(totale_anomali/fattura_no_tax*100) if fattura_no_tax > 0 else 0:.1f}%", f"€ {totale_anomali:,.2f}", delta_color="inverse")
+            col5.metric("Analisi Incidenza Supplementi", f"{(totale_anomali/fattura_no_tax*100) if fattura_no_tax > 0 else 0:.1f}%", f"€ {totale_anomali:,.2f}", delta_color="inverse")
 
             # ==============================
             # SEZIONE 1.2: VOLUMI E SERVIZI
@@ -526,10 +578,10 @@ if uploaded_file:
                     if sped_da_perfezionare > 0:
                         st.warning(f"Abbiamo individuato **{sped_da_perfezionare} spedizioni** su cui possiamo migliorare il processo di pesatura. Agire su queste inefficienze permette di ottimizzare i costi futuri.")
                         
-                        # Calcolo del supplemento (maggiore tra 1.50 e l'8% per ogni singola spedizione)
-                        tot_scc = df_rischio['Totale_Spedizione'].apply(lambda x: max(1.50, x * 0.08)).sum()
+                        # Calcolo del supplemento (maggiore tra min e percentuale per ogni singola spedizione)
+                        tot_scc = df_rischio['Totale_Spedizione'].apply(lambda x: max(rules["correction_fee_min"], x * rules["correction_fee_pct"])).sum()
 
-                        st.markdown(f"- 📦 **Da perfezionare:** {sped_da_perfezionare} su {tot_spedizioni_audit} spedizioni (scostamento ≥ 25%)")
+                        st.markdown(f"- 📦 **Da perfezionare:** {sped_da_perfezionare} su {tot_spedizioni_audit} spedizioni (scostamento ≥ {rules['correction_fee_threshold']:.0f}%)")
                         st.markdown(f"- ⚠️ **Previsione Correction Fee:** +€ {tot_scc:.2f}")
                         
                         totale_anomali_bullet = df[df['Alert_Final'] == True][COL_IMPORTO].sum()
@@ -543,16 +595,16 @@ if uploaded_file:
                     st.markdown("### 📊 Correction Fee ( discrepanza tra peso dichiarato e peso rilevato)")
                     
                     with st.expander("ℹ️ INFO TECNICA: Come UPS calcola il Correction Fee", expanded=False):
-                        st.markdown("""
+                        st.markdown(f"""
                         **Shipping Charge Correction (Correction Fee)**  
-                        Un supplemento per la correzione delle spese di spedizione viene applicato da UPS quando riscontra una discrepanza tra pesi e dimensioni dichiarate e rilevate tale per cui il costo fatturato risulti essere pari o superiore al 25% rispetto a quello dichiarato.
+                        Un supplemento per la correzione delle spese di spedizione viene applicato da UPS quando riscontra una discrepanza tra pesi e dimensioni dichiarate e rilevate tale per cui il costo fatturato risulti essere pari o superiore al {rules['correction_fee_threshold']:.0f}% rispetto a quello dichiarato.
                         
                         Il supplemento è calcolato sull'insieme delle spedizioni corrette nel periodo di fatturazione, ed equivale alla **maggiore tra due opzioni**:
-                        • **EUR 1,50** per ogni spedizione soggetta a correzione; oppure
-                        • **8% dell'importo totale** delle spese di spedizione corrette.
+                        • **EUR {rules['correction_fee_min']:.2f}** per ogni spedizione soggetta a correzione; oppure
+                        • **{rules['correction_fee_pct']*100:.0f}% dell'importo totale** delle spese di spedizione corrette.
                         
                         💡 **La nostra Analisi:**  
-                        Poiché la fattura contiene solo il peso dichiarato e quello reale fatturato, il sistema stima proattivamente questo rischio evidenziando le spedizioni dove la discrepanza di **Peso** è superiore al **25%** (usato come proxy per lo scostamento di costo).
+                        Poiché la fattura contiene solo il peso dichiarato e quello reale fatturato, il sistema stima proattivamente questo rischio evidenziando le spedizioni dove la discrepanza di **Peso** è superiore al **{rules['correction_fee_threshold']:.0f}%** (usato come proxy per lo scostamento di costo).
                         """)
                     
                     st.markdown("#### 🔎 Spedizioni su cui formare il magazzino")
@@ -560,8 +612,8 @@ if uploaded_file:
                     # Preparo tabella display
                     df_scc_display = df_rischio[[COL_SPEDIZIONE, 'Peso_Spec', 'Peso_Fatt', 'Delta_Peso_Perc', 'UM', 'Totale_Spedizione']].copy()
                     
-                    # La penale per riga non può mai essere inferiore a 1.50
-                    df_scc_display['Penale Stimata'] = df_scc_display['Totale_Spedizione'].apply(lambda x: max(1.50, x * 0.08))
+                    # La penale per riga non può mai essere inferiore a min
+                    df_scc_display['Penale Stimata'] = df_scc_display['Totale_Spedizione'].apply(lambda x: max(rules["correction_fee_min"], x * rules["correction_fee_pct"]))
                         
                     df_scc_display['Nuovo Costo Stimato'] = df_scc_display['Totale_Spedizione'] + df_scc_display['Penale Stimata']
                     
