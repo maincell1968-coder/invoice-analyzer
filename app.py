@@ -392,7 +392,7 @@ if uploaded_file:
             # SEZIONE 1.5: FOCUS SUPPLEMENTI ANOMALI
             # ==============================
             st.markdown("---")
-            st.subheader("📊 KPI Surcharge: Analisi Incidenza Supplementi")
+            st.subheader("📊 Analisi Incidenza Supplementi")
             st.markdown("Questa sezione analizza in dettaglio i **Surcharge (Supplementi Anomali)**, escludendo Nolo, Fuel, Tasse e Residenziale se ignorato. Mostra quanto incidono sul totale della fattura al netto delle tasse.")
             
             df_anomali = df[df['Alert_Final'] == True]
@@ -418,8 +418,8 @@ if uploaded_file:
             # SEZIONE 2: ANALISI PER SERVIZIO SPEDIZIONI SINGOLE
             # ==============================
             st.markdown("---")
-            st.subheader("📊 KPI: Outlier >30%")
-            st.info("💡 **Disclaimer:** Il KPI “Outlier >30%” segnala spedizioni con uno scostamento significativo rispetto al costo medio del cliente. La sua rilevanza aumenta per clienti con formati di spedizione standardizzati, mentre può risultare meno indicativo in presenza di ampia variabilità di pesi e dimensioni.")
+            st.subheader("📊 Scostamenti variabilità pesi e dimensioni")
+            st.info("💡 **Disclaimer:** L'indicatore “Scostamenti variabilità pesi e dimensioni” segnala spedizioni con uno scostamento significativo rispetto al costo medio del cliente. La sua rilevanza aumenta per clienti con formati di spedizione standardizzati, mentre può risultare meno indicativo in presenza di ampia variabilità di pesi e dimensioni.")
             
             if len(grouped) > 0:
                 grouped['Pacchi_Num'] = pd.to_numeric(grouped['Pacchi'], errors='coerce').fillna(1.0)
@@ -438,10 +438,10 @@ if uploaded_file:
                         
                     if percentuale_dominante >= 80:
                         with st.expander(f"🟢 **Contesto Omogeneo ({percentuale_dominante:.0f}%)** - Dato altamente significativo"):
-                            st.markdown("Oltre l’80% delle spedizioni rientra nello stesso range di peso reale o volumetrico.\n\nL’indicatore Outlier >30% è considerato **altamente significativo**.")
+                            st.markdown("Oltre l’80% delle spedizioni rientra nello stesso range di peso reale o volumetrico.\n\nL'indicatore “Scostamenti variabilità pesi e dimensioni” è considerato **altamente significativo**.")
                     else:
                         with st.expander(f"🟡 **Alta Variabilità ({percentuale_dominante:.0f}%)** - Interpretare con cautela"):
-                            st.markdown("Le spedizioni risultano distribuite su più range di peso e volume.\n\nL’indicatore Outlier >30% può riflettere **variabilità operativa fisiologica**.")
+                            st.markdown("Le spedizioni risultano distribuite su più range di peso e volume.\n\nL'indicatore “Scostamenti variabilità pesi e dimensioni” può riflettere **variabilità operativa fisiologica**.")
                             
                     st.markdown("<br>", unsafe_allow_html=True)
                     stats_servizio = grouped_singole.groupby('Servizio').agg(
@@ -540,7 +540,7 @@ if uploaded_file:
                 
                 if not df_rischio.empty:
                     st.markdown("---")
-                    st.markdown("### 📊 KPI: Correction Fee")
+                    st.markdown("### 📊 Correction Fee ( discrepanza tra peso dichiarato e peso rilevato)")
                     
                     with st.expander("ℹ️ INFO TECNICA: Come UPS calcola il Correction Fee", expanded=False):
                         st.markdown("""
